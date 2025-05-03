@@ -159,15 +159,6 @@ void daemonize(int argc, char *argv[]) {
         return;
     }
 
-    // ❌ REMOVE this:
-    // if (chdir("/") < 0) {
-    //     perror("chdir failed");
-    //     return -1;
-    // }
-
-    // ✅ Keep the working directory as-is
-
-    // Close file descriptors
     for (int fd = 0; fd < sysconf(_SC_OPEN_MAX); fd++) {
         close(fd);
     }
