@@ -7,6 +7,8 @@
 #include <sys/stat.h>
 #include <string.h>
 #include <unistd.h>
+#include <errno.h>
+
 #include "headers/process_info.h"
 #include "headers/proxy.h"
 
@@ -24,28 +26,34 @@ void create_directory_if_needed(const char *filepath) {
     strncpy(path_copy, filepath, sizeof(path_copy));
     path_copy[sizeof(path_copy) - 1] = '\0';
 
-    char *dir_path = dirname(path_copy);
+    // Get the directory part of the path
+    char dir_path[1024];
+    strncpy(dir_path, dirname(path_copy), sizeof(dir_path));
+    dir_path[sizeof(dir_path) - 1] = '\0';
 
-    struct stat st = {0};
-    if (stat(dir_path, &st) == -1) {
-        char tmp_path[1024] = {0};
-        char *p = NULL;
-        size_t len;
+    char tmp_path[1024] = "";
+    char *token;
+    const char delim[2] = "/";
 
-        // Recursively create all subdirectories
-        snprintf(tmp_path, sizeof(tmp_path), "%s", dir_path);
-        len = strlen(tmp_path);
-        if (tmp_path[len - 1] == '/')
-            tmp_path[len - 1] = '\0';
+    // Handle absolute paths
+    if (filepath[0] == '/') {
+        strcat(tmp_path, "/");
+    }
 
-        for (p = tmp_path + 1; *p; p++) {
-            if (*p == '/') {
-                *p = '\0';
-                mkdir(tmp_path, 0755);
-                *p = '/';
+    token = strtok(dir_path, delim);
+    while (token != NULL) {
+        strcat(tmp_path, token);
+        strcat(tmp_path, "/");
+
+        struct stat st = {0};
+        if (stat(tmp_path, &st) == -1) {
+            if (mkdir(tmp_path, 0755) == -1 && errno != EEXIST) {
+                perror("mkdir");
+                return;
             }
         }
-        mkdir(tmp_path, 0755);  // Final mkdir
+
+        token = strtok(NULL, delim);
     }
 }
 
