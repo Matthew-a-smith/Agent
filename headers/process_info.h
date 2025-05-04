@@ -19,6 +19,10 @@ typedef struct {
 } ProcessInfo;
 
 typedef struct {
+    char saved_file[2048];
+} File;
+
+typedef struct {
     char pid[16];
     char proc_name[256];
     char cmd[2048];
