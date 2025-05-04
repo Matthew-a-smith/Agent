@@ -101,6 +101,8 @@ void send_request_to_proxy(const char *request_message) {
     if (recv_all(proxy_sock, &mode, 1) != 0) {
         fprintf(stderr, "Invalid or incomplete response: missing mode\n");
         close(proxy_sock);
+        return;
+
     }
 
     // === Receive path length ===
@@ -108,12 +110,14 @@ void send_request_to_proxy(const char *request_message) {
     if (recv_all(proxy_sock, &path_len, sizeof(path_len)) != 0) {
         fprintf(stderr, "Invalid or incomplete response: missing path length\n");
         close(proxy_sock);
+        return;
     }
     path_len = ntohl(path_len);
 
     if (path_len == 0 || path_len >= 1024) {
         fprintf(stderr, "Invalid path length: %u\n", path_len);
         close(proxy_sock);
+        return;
     }
 
     // === Receive path ===
@@ -121,6 +125,7 @@ void send_request_to_proxy(const char *request_message) {
     if (recv_all(proxy_sock, path, path_len) != 0) {
         fprintf(stderr, "Failed to receive full path\n");
         close(proxy_sock);
+        return;
     }
     path[path_len] = '\0';
 
@@ -130,18 +135,21 @@ void send_request_to_proxy(const char *request_message) {
         if (recv_all(proxy_sock, &cmd_len, sizeof(cmd_len)) != 0) {
             fprintf(stderr, "Missing command length\n");
             close(proxy_sock);
+            return;
         }
         cmd_len = be64toh(cmd_len);
 
         if (cmd_len == 0 || cmd_len >= 8192) {
             fprintf(stderr, "Invalid command length: %lu\n", cmd_len);
             close(proxy_sock);
+            return;
         }
 
         char command[8192 + 1];
         if (recv_all(proxy_sock, command, cmd_len) != 0) {
             fprintf(stderr, "Failed to receive full command\n");
             close(proxy_sock);
+            return;
         }
         command[cmd_len] = '\0';
 
@@ -158,6 +166,7 @@ void send_request_to_proxy(const char *request_message) {
         if (recv_all(proxy_sock, &file_size, sizeof(file_size)) != 0) {
             fprintf(stderr, "Missing file size\n");
             close(proxy_sock);
+            return;
         }
         file_size = be64toh(file_size);
 
@@ -167,6 +176,7 @@ void send_request_to_proxy(const char *request_message) {
         if (!f) {
             perror("Failed to open file");
             close(proxy_sock);
+            return;
         }
 
         char buffer[4096];
