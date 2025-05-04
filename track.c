@@ -20,6 +20,7 @@
 
 extern const char *suspicious_extensions[];
 void handle_suspicious_process(const ProcessInfo *p);
+void handle_file(const File *f);
 void handle_normal_process(const NormalInfo *n);
 
 ino_t inode = 0;
@@ -239,6 +240,9 @@ void process_new_process(const char *pid) {
 
     if (strcmp(src_path, "[NoneFound]") != 0) {
         copy_file_to_tmp_location(src_path, saved_file, sizeof(saved_file));
+        File finfo = {0};
+        strncpy(finfo.saved_file, saved_file, sizeof(finfo.saved_file));
+        handle_file(&finfo);
     }
 
     compute_sha256(src_path, src_sum);

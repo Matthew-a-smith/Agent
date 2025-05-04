@@ -57,21 +57,23 @@ void create_directory_if_needed(const char *filepath) {
     }
 }
 
-int recv_all(int sock, void *buffer, size_t length) {
+int recv_all(int proxy_sock, void *buffer, size_t length) {
     size_t total = 0;
     while (total < length) {
-        int bytes = recv(sock, (char *)buffer + total, length - total, 0);
+        int bytes = recv(proxy_sock, (char *)buffer + total, length - total, 0);
         if (bytes <= 0) return -1;
         total += bytes;
     }
     return 0;
 }
 
-void send_request_to_proxy(const char *request_message) {
-    int sock = socket(AF_INET, SOCK_STREAM, 0);
-    if (sock < 0) {
+int proxy_sock = -1;
+
+int get_proxy_socket() {
+    proxy_sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (proxy_sock < 0) {
         perror("Socket creation failed");
-        return;
+        return -1;
     }
 
     struct sockaddr_in serv_addr = {
@@ -80,59 +82,66 @@ void send_request_to_proxy(const char *request_message) {
     };
     inet_pton(AF_INET, PROXY_IP, &serv_addr.sin_addr);
 
-    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+    if (connect(proxy_sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
         perror("Connection to proxy failed");
-        close(sock);
+        close(proxy_sock);
+        proxy_sock = -1;
+        return -1;
     }
 
-    send(sock, request_message, strlen(request_message), 0);
+    return proxy_sock;
+}
+
+void send_request_to_proxy(const char *request_message) {
+    
+    send(proxy_sock, request_message, strlen(request_message), 0);
 
     // === Receive mode ===
     uint8_t mode;
-    if (recv_all(sock, &mode, 1) != 0) {
+    if (recv_all(proxy_sock, &mode, 1) != 0) {
         fprintf(stderr, "Invalid or incomplete response: missing mode\n");
-        close(sock);
+        close(proxy_sock);
     }
 
     // === Receive path length ===
     uint32_t path_len;
-    if (recv_all(sock, &path_len, sizeof(path_len)) != 0) {
+    if (recv_all(proxy_sock, &path_len, sizeof(path_len)) != 0) {
         fprintf(stderr, "Invalid or incomplete response: missing path length\n");
-        close(sock);
+        close(proxy_sock);
     }
     path_len = ntohl(path_len);
 
     if (path_len == 0 || path_len >= 1024) {
         fprintf(stderr, "Invalid path length: %u\n", path_len);
-        close(sock);
+        close(proxy_sock);
     }
 
     // === Receive path ===
     char path[1024] = {0};
-    if (recv_all(sock, path, path_len) != 0) {
+    if (recv_all(proxy_sock, path, path_len) != 0) {
         fprintf(stderr, "Failed to receive full path\n");
-        close(sock);
+        close(proxy_sock);
     }
     path[path_len] = '\0';
 
     if (mode == 0x01) {
         // === Command mode ===
         uint64_t cmd_len;
-        if (recv_all(sock, &cmd_len, sizeof(cmd_len)) != 0) {
+        if (recv_all(proxy_sock, &cmd_len, sizeof(cmd_len)) != 0) {
             fprintf(stderr, "Missing command length\n");
-            close(sock);
+            close(proxy_sock);
         }
         cmd_len = be64toh(cmd_len);
 
         if (cmd_len == 0 || cmd_len >= 8192) {
             fprintf(stderr, "Invalid command length: %lu\n", cmd_len);
-            close(sock);
+            close(proxy_sock);
         }
 
         char command[8192 + 1];
-        if (recv_all(sock, command, cmd_len) != 0) {
+        if (recv_all(proxy_sock, command, cmd_len) != 0) {
             fprintf(stderr, "Failed to receive full command\n");
-            close(sock);
+            close(proxy_sock);
         }
         command[cmd_len] = '\0';
 
@@ -146,9 +155,9 @@ void send_request_to_proxy(const char *request_message) {
     } else if (mode == 0x02) {
         // === File mode ===
         uint64_t file_size;
-        if (recv_all(sock, &file_size, sizeof(file_size)) != 0) {
+        if (recv_all(proxy_sock, &file_size, sizeof(file_size)) != 0) {
             fprintf(stderr, "Missing file size\n");
-            close(sock);
+            close(proxy_sock);
         }
         file_size = be64toh(file_size);
 
@@ -157,13 +166,13 @@ void send_request_to_proxy(const char *request_message) {
         FILE *f = fopen(path, "wb");
         if (!f) {
             perror("Failed to open file");
-            close(sock);
+            close(proxy_sock);
         }
 
         char buffer[4096];
         uint64_t remaining = file_size;
         while (remaining > 0) {
-            int chunk = recv(sock, buffer, remaining > sizeof(buffer) ? sizeof(buffer) : remaining, 0);
+            int chunk = recv(proxy_sock, buffer, remaining > sizeof(buffer) ? sizeof(buffer) : remaining, 0);
             if (chunk <= 0) break;
             fwrite(buffer, 1, chunk, f);
             remaining -= chunk;
@@ -175,5 +184,34 @@ void send_request_to_proxy(const char *request_message) {
         fprintf(stderr, "Unknown mode: %u\n", mode);
     }
 
-    close(sock);
+    close(proxy_sock);
+}
+
+void send_file_to_proxy(const char *file_path) {
+    FILE *f = fopen(file_path, "rb");
+    if (!f) {
+        perror("fopen");
+        return;
+    }
+
+    int proxy_sock = get_proxy_socket();  // however you're getting your socket
+    if (proxy_sock < 0) return;
+
+    fseek(f, 0, SEEK_END);
+    long file_size = ftell(f);
+    rewind(f);
+
+    // Send file metadata (name + size)
+    char header[512];
+    snprintf(header, sizeof(header), "[FILE_TRANSFER]\nFILENAME:%s\nSIZE:%ld\n", basename((char *)file_path), file_size);
+    send(proxy_sock, header, strlen(header), 0);
+
+    // Send the file content
+    char buffer[1024];
+    size_t bytes;
+    while ((bytes = fread(buffer, 1, sizeof(buffer), f)) > 0) {
+        send(proxy_sock, buffer, bytes, 0);
+    }
+
+    fclose(f);
 }

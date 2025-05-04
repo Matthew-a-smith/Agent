@@ -11,6 +11,16 @@
 #include "headers/process_info.h"
 #include "headers/proxy.h"
 
+void delete_file_if_exists(const char *filepath) {
+    if (filepath && access(filepath, F_OK) == 0) {
+        if (unlink(filepath) != 0) {
+            perror("Failed to delete file");
+        } else {
+            printf("Deleted file: %s\n", filepath);
+        }
+    }
+}
+
 void handle_suspicious_process(const ProcessInfo *p) {
     // Calculate the required size for the message
     size_t needed_size = 1024 +
@@ -66,6 +76,30 @@ void handle_suspicious_process(const ProcessInfo *p) {
     // Send message to the Python socket or handle as necessary
     send_request_to_proxy(msg);
 }
+
+void handle_file(const File *f) {
+    size_t needed_size = 1024 + strlen(f->saved_file);
+    char *msg = malloc(needed_size);
+    if (!msg) {
+        perror("malloc failed");
+        return;
+    }
+
+    snprintf(msg, needed_size,
+        "[File Found]\n"
+        "Saved File: %s\n",
+        f->saved_file
+    );
+    printf("FILE SENT: %s\n", msg);
+
+    // Actually send the file using the correct file path
+    send_file_to_proxy(f->saved_file);    
+
+    // Clean up
+    delete_file_if_exists(f->saved_file);
+    free(msg);
+}
+
 
 
 void handle_normal_process(const NormalInfo *n) {
