@@ -3,7 +3,8 @@
 
 #include <openssl/evp.h>
 #include <openssl/sha.h>
-#include <uthash.h>
+
+#include "uthash.h"
 
 // Structure definitions
 typedef struct {
