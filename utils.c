@@ -5,12 +5,12 @@
 #include <openssl/sha.h>
 #include <time.h>
 #include <pwd.h>
-#include <uthash.h>
 #include <sys/stat.h>
 #include <sys/types.h>   // <-- for ino_t
 #include <limits.h> // for PATH_MAX
 #include <unistd.h> // for access()
 
+#include "uthash.h"
 #include "headers/utils.h"
 
 // Global variables
