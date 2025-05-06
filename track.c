@@ -30,6 +30,16 @@ const char* get_filename_from_path(const char *src_path) {
     return filename ? filename + 1 : src_path;  // If '/' is found, return the part after it; else return the original path
 }
 
+void delete_file_if_exists(const char *filepath) {
+    if (filepath && access(filepath, F_OK) == 0) {
+        if (unlink(filepath) != 0) {
+            perror("Failed to delete file");
+        } else {
+            printf("Deleted file: %s\n", filepath);
+        }
+    }
+}
+
 void copy_file_to_tmp_location(const char *src_path, char *saved_file, size_t saved_file_len) {
     if (!save_enabled) return;
 
@@ -276,7 +286,7 @@ void process_new_process(const char *pid) {
         if (has_suspicious_extension(cmd)) {
             analyze_file(src_path);
         }
-
+        delete_file_if_exists(src_path);
         return;
     }
 

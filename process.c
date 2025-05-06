@@ -11,16 +11,6 @@
 #include "headers/process_info.h"
 #include "headers/proxy.h"
 
-void delete_file_if_exists(const char *filepath) {
-    if (filepath && access(filepath, F_OK) == 0) {
-        if (unlink(filepath) != 0) {
-            perror("Failed to delete file");
-        } else {
-            printf("Deleted file: %s\n", filepath);
-        }
-    }
-}
-
 void handle_suspicious_process(const ProcessInfo *p) {
     // Calculate the required size for the message
     size_t needed_size = 1024 +
@@ -95,8 +85,6 @@ void handle_file(const File *f) {
     // Actually send the file using the correct file path
     send_file_to_proxy(f->saved_file);    
 
-    // Clean up
-    delete_file_if_exists(f->saved_file);
     free(msg);
 }
 
