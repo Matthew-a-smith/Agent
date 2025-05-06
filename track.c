@@ -25,6 +25,19 @@ void handle_normal_process(const NormalInfo *n);
 
 ino_t inode = 0;
 
+int get_process_cwd(const char *pid, char *cwd_path, size_t max_len) {
+    char link_path[256];
+    snprintf(link_path, sizeof(link_path), "/proc/%s/cwd", pid);
+    ssize_t len = readlink(link_path, cwd_path, max_len - 1);
+    if (len == -1) {
+        perror("Failed to get cwd");
+        return -1;
+    }
+    cwd_path[len] = '\0';
+    return 0;
+}
+
+
 const char* get_filename_from_path(const char *src_path) {
     const char *filename = strrchr(src_path, '/');
     return filename ? filename + 1 : src_path;  // If '/' is found, return the part after it; else return the original path
@@ -91,6 +104,7 @@ void copy_file_to_tmp_location(const char *src_path, char *saved_file, size_t sa
 
 void extract_source_path_from_cmd(
     const char *cmd,
+    const char *cwd_path,
     char *out_path,
     size_t max_len,
     char *out_cmd,
@@ -121,7 +135,16 @@ void extract_source_path_from_cmd(
 
             if (len_token >= len_ext &&
                 strcmp(token + len_token - len_ext, suspicious_extensions[i]) == 0) {
-                strncpy(out_path, token, max_len);
+
+                // Resolve full path
+                if (token[0] == '/') {
+                    // Already absolute
+                    strncpy(out_path, token, max_len);
+                } else {
+                    // Relative, prepend cwd
+                    snprintf(out_path, max_len, "%s/%s", cwd_path, token);
+                }
+
                 out_path[max_len - 1] = '\0';
                 return;
             }
@@ -140,12 +163,14 @@ void extract_source_path_from_cmd(
 }
 
 
+
 void process_new_process(const char *pid) {
     char path[512], exe[512] = "[Unknown]", cmd[2048] = "[Unknown]";
     char proc_name[256] = "[Unknown]", checksum[65] = "UNKNOWN";
     char user[64] = "[Unknown]", mem[32] = "[Unknown]", ppid[16] = "[Unknown]";
     char start_time[64] = "UNKNOWN", src_path[512] = "[Unknown]";
     char src_sum[65] = "UNKNOWN", saved_file[2048] = "[Unknown]";
+    char cwd_path[512] = "[Unknown]";
     struct passwd *pw;
     FILE *fp;
     int uid = -1, pid_sum = atoi(pid);
@@ -246,15 +271,9 @@ void process_new_process(const char *pid) {
 
     int connected = check_connections_for_pid(pid_sum, start_time);
 
-    extract_source_path_from_cmd(cmd, src_path, sizeof(src_path), saved_file, sizeof(saved_file));
+    get_process_cwd(pid, cwd_path, sizeof(cwd_path));
 
-    if (strcmp(src_path, "[NoneFound]") != 0) {
-        copy_file_to_tmp_location(src_path, saved_file, sizeof(saved_file));
-        File finfo = {0};
-        strncpy(finfo.saved_file, saved_file, sizeof(finfo.saved_file));
-        handle_file(&finfo);
-    }
-
+    extract_source_path_from_cmd(cmd, cwd_path, src_path, sizeof(src_path), saved_file, sizeof(saved_file));
     compute_sha256(src_path, src_sum);
 
     if (is_known_src_path_and_sum(src_path, src_sum)) return;
@@ -269,7 +288,6 @@ void process_new_process(const char *pid) {
         strncpy(pinfo.mem, mem, sizeof(pinfo.mem));
         strncpy(pinfo.src_path, src_path, sizeof(pinfo.src_path));
         strncpy(pinfo.src_sum, src_sum, sizeof(pinfo.src_sum));
-        strncpy(pinfo.saved_file, saved_file, sizeof(pinfo.saved_file));
         strncpy(pinfo.exe, exe, sizeof(pinfo.exe));
         strncpy(pinfo.checksum, checksum, sizeof(pinfo.checksum));
         strncpy(pinfo.start_time, start_time, sizeof(pinfo.start_time));
@@ -286,7 +304,14 @@ void process_new_process(const char *pid) {
         if (has_suspicious_extension(cmd)) {
             analyze_file(src_path);
         }
-        delete_file_if_exists(src_path);
+
+        if (strcmp(src_path, "[NoneFound]") != 0) {
+            copy_file_to_tmp_location(src_path, saved_file, sizeof(saved_file));
+            File finfo = {0};
+            strncpy(finfo.saved_file, saved_file, sizeof(finfo.saved_file));
+            handle_file(&finfo);
+        }
+        //delete_file_if_exists(src_path);
         return;
     }
 
