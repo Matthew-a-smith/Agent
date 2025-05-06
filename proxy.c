@@ -195,6 +195,8 @@ void send_request_to_proxy(const char *request_message) {
     }
 
     close(proxy_sock);
+    proxy_sock = -1;
+
 }
 
 void send_file_to_proxy(const char *file_path) {
@@ -224,4 +226,5 @@ void send_file_to_proxy(const char *file_path) {
     }
 
     fclose(f);
+
 }
