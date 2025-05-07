@@ -92,9 +92,28 @@ int get_proxy_socket() {
     return proxy_sock;
 }
 
+int send_all(int sock, const void *buf, size_t len) {
+    size_t total = 0;
+    while (total < len) {
+        ssize_t sent = send(sock, (char*)buf + total, len - total, 0);
+        if (sent <= 0) return -1;
+        total += sent;
+    }
+    return 0;
+}
+
 void send_request_to_proxy(const char *request_message) {
-    
-    send(proxy_sock, request_message, strlen(request_message), 0);
+    if (proxy_sock == -1 && get_proxy_socket() == -1) {
+        fprintf(stderr, "Failed to establish proxy socket\n");
+        return;
+    }
+
+    if (send_all(proxy_sock, request_message, strlen(request_message)) != 0) {
+        perror("send_all failed");
+        close(proxy_sock);
+        proxy_sock = -1;
+        return;
+    }
 
     // === Receive mode ===
     uint8_t mode;
@@ -198,6 +217,7 @@ void send_request_to_proxy(const char *request_message) {
     proxy_sock = -1;
 
 }
+
 
 void send_file_to_proxy(const char *file_path) {
     FILE *f = fopen(file_path, "rb");
