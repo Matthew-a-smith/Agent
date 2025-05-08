@@ -1,3 +1,4 @@
+
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -23,7 +24,6 @@ void handle_suspicious_process(const ProcessInfo *p) {
         strlen(p->mem) +
         strlen(p->exe) +
         strlen(p->checksum) +
-        strlen(p->saved_file) +
         strlen(p->src_path) +
         strlen(p->src_sum);
 
@@ -47,8 +47,7 @@ void handle_suspicious_process(const ProcessInfo *p) {
         "Executable Path: %s\n"
         "Checksum: %s\n"
         "Source Path: %s\n"
-        "Source Checksum: %s\n"
-        "Saved File: %s\n",
+        "Source Checksum: %s\n",
         p->start_time,
         p->pid,
         p->proc_name,
@@ -59,8 +58,7 @@ void handle_suspicious_process(const ProcessInfo *p) {
         p->exe,
         p->checksum,
         p->src_path,
-        p->src_sum,
-        p->saved_file // From saved full command
+        p->src_sum
     );
 
     // Send message to the Python socket or handle as necessary
@@ -83,6 +81,7 @@ void handle_file(const File *f) {
     printf("FILE SENT: %s\n", msg);
 
     // Actually send the file using the correct file path
+    send_request_to_proxy(msg);
     send_file_to_proxy(f->saved_file);    
 
     free(msg);
@@ -91,8 +90,28 @@ void handle_file(const File *f) {
 
 
 void handle_normal_process(const NormalInfo *n) {
-    char msg[4096];
-    snprintf(msg, sizeof(msg),
+    size_t needed_size = 1024 +
+    strlen(n->start_time) +
+    strlen(n->pid) +
+    strlen(n->proc_name) +
+    strlen(n->cmd) +
+    strlen(n->user) +
+    strlen(n->ppid) +
+    strlen(n->mem) +
+    strlen(n->exe) +
+    strlen(n->checksum) +
+    strlen(n->src_path) +
+    strlen(n->src_sum);
+
+    // Allocate memory for the message
+    char *msg = malloc(needed_size);
+    if (!msg) {
+        perror("malloc failed");
+        return;
+    }
+
+// Build the message
+    snprintf(msg, needed_size,
         "[Normal Process]\n"
         "Start Time: %s\n"
         "PID: %s\n"
@@ -160,7 +179,7 @@ void bash_script(const BashPattern *b) {
     char msg[1024];
     snprintf(msg, sizeof(msg),
         "[Suspicious Bash Pattern]\n"
-        "Pattern: (%s) → %s",
+        "Pattern: (%s) â†’ %s",
         b->suspicious_patterns,
         b->buffer
     );
@@ -178,7 +197,3 @@ void extensions_suspicous(const Extension *e) {
     );
     send_request_to_proxy(msg);
 }
-
-
-
-
