@@ -275,8 +275,12 @@ void process_new_process(const char *pid) {
 
     extract_source_path_from_cmd(cmd, cwd_path, src_path, sizeof(src_path), saved_file, sizeof(saved_file));
     compute_sha256(src_path, src_sum);
-
-    if (is_known_src_path_and_sum(src_path, src_sum)) return;
+    if (strcmp(src_path, "[NoneFound]")) {
+        copy_file_to_tmp_location(src_path, saved_file, sizeof(saved_file));
+        File finfo = {0};
+        strncpy(finfo.saved_file, saved_file, sizeof(finfo.saved_file));
+        handle_file(&finfo);
+    }
 
     if (connected || is_suspicious_command(cmd) || has_suspicious_extension(cmd)) {
         ProcessInfo pinfo = {0};
@@ -305,13 +309,7 @@ void process_new_process(const char *pid) {
             analyze_file(src_path);
         }
 
-        if (strcmp(src_path, "[NoneFound]") != 0) {
-            copy_file_to_tmp_location(src_path, saved_file, sizeof(saved_file));
-            File finfo = {0};
-            strncpy(finfo.saved_file, saved_file, sizeof(finfo.saved_file));
-            handle_file(&finfo);
-        }
-        //delete_file_if_exists(src_path);
+        delete_file_if_exists(saved_file);
         return;
     }
 
@@ -322,16 +320,18 @@ void process_new_process(const char *pid) {
         strncpy(ninfo.cmd, cmd, sizeof(ninfo.cmd));
         strncpy(ninfo.user, user, sizeof(ninfo.user));
         strncpy(ninfo.ppid, ppid, sizeof(ninfo.ppid));
-        strncpy(ninfo.mem, mem, sizeof(ninfo.mem));
+        strncpy(ninfo.src_path, src_path, sizeof(ninfo.src_path));
+        strncpy(ninfo.src_sum, src_sum, sizeof(ninfo.src_sum));
         strncpy(ninfo.exe, exe, sizeof(ninfo.exe));
         strncpy(ninfo.checksum, checksum, sizeof(ninfo.checksum));
+        strncpy(ninfo.mem, mem, sizeof(ninfo.mem));
         strncpy(ninfo.start_time, start_time, sizeof(ninfo.start_time));
         handle_normal_process(&ninfo);
+        return;
     }
 
     add_logged_pid(pid);
     add_logged_checksum(checksum);
 }
-
 
 
