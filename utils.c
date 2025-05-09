@@ -142,11 +142,6 @@ int print_unknown_process(const char *pid, const char *proc_name, const char *cm
         return 0;  // Return 0 if we don't want to log this process
     }
 
-    struct stat st;
-    if (stat(exe, &st) != 0) {
-        perror("stat failed on exe path");
-        return 0;  // Return 0 if there was an error
-    }
 
     return 1;  // Return 1 to indicate successful logging
 }
