@@ -30,7 +30,7 @@ int get_process_cwd(const char *pid, char *cwd_path, size_t max_len) {
     snprintf(link_path, sizeof(link_path), "/proc/%s/cwd", pid);
     ssize_t len = readlink(link_path, cwd_path, max_len - 1);
     if (len == -1) {
-        perror("Failed to get cwd");
+        //perror("Failed to get cwd");
         return -1;
     }
     cwd_path[len] = '\0';
