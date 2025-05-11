@@ -10,6 +10,7 @@
 #include <sys/select.h>  // For select() function
 #include <time.h>  // For precise sleep control (using nanosleep)
 
+#include <stdbool.h>
 #include "headers/utils.h"
 #include "headers/track.h"  // Include the header for track.c
 #include "headers/decompile.h"  // Include the header for suspicious process monitoring
@@ -170,7 +171,22 @@ void daemonize(int argc, char *argv[]) {
 
     return;
 }
+
+
+void show_spinner_for_3_seconds() {
+    const char spinner[] = "|/-\\";
+    printf("[   ] Starting...");
+    fflush(stdout);
+
+    for (int i = 0; i < 30; ++i) {
+        printf("\r[ %c ] Starting...", spinner[i % 4]);
+        fflush(stdout);
+        usleep(100000); // 0.1 second
+    }
+}
 int main(int argc, char *argv[]) {
+    show_spinner_for_3_seconds();
+    
     daemonize(argc, argv);
     // Start monitoring
     monitor_processes_with_delay();
